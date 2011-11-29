@@ -2543,7 +2543,8 @@ YAHOO.widget.DataTable = function(elContainer,aColumnDefs,oDataSource,oConfigs) 
     }
     // Do not send an initial request at all
     else if(initialLoad === false) {
-        this.showTableMessage(this.get("MSG_EMPTY"), DT.CLASS_EMPTY);
+        //this.showTableMessage(this.get("MSG_EMPTY"), DT.CLASS_EMPTY);
+        this.showTableMessage("", DT.CLASS_EMPTY);
     }
     // Send an initial request with a custom payload
     else {
@@ -3617,12 +3618,14 @@ initAttributes : function(oConfigs) {
             if(this._elThead) {
                 if(oOldSortedBy && oOldSortedBy.key && oOldSortedBy.dir) {
                     oOldColumn = this._oColumnSet.getColumn(oOldSortedBy.key);
-                    nOldColumnKeyIndex = oOldColumn.getKeyIndex();
-                    
-                    // Remove previous UI from THEAD
-                    var elOldTh = oOldColumn.getThEl();
-                    Dom.removeClass(elOldTh, oOldSortedBy.dir);
-                    this.formatTheadCell(oOldColumn.getThLinerEl().firstChild, oOldColumn, oNewSortedBy);
+                    if (oOldColumn) {
+                        nOldColumnKeyIndex = oOldColumn.getKeyIndex();
+                        
+                        // Remove previous UI from THEAD
+                        var elOldTh = oOldColumn.getThEl();
+                        Dom.removeClass(elOldTh, oOldSortedBy.dir);
+                        this.formatTheadCell(oOldColumn.getThLinerEl().firstChild, oOldColumn, oNewSortedBy);
+                    }
                 }
                 if(oNewSortedBy) {
                     oNewColumn = (oNewSortedBy.column) ? oNewSortedBy.column : this._oColumnSet.getColumn(oNewSortedBy.key);
@@ -5416,11 +5419,14 @@ _formatTdEl : function (oColumn, elTd, index, isLast) {
  * @return {HTMLElement} The new TR element.  This must be added to the DOM.
  * @private 
  */
-_addTrEl : function (oRecord) {
+_addTrEl : function (oRecord, stripe) {
     var elTrTemplate = this._getTrTemplateEl();
     
     // Clone the TR template.
     var elTr = elTrTemplate.cloneNode(true);
+    if (stripe) {
+        Dom.addClass(elTr,stripe);
+    }
     
     // Populate content
     return this._updateTrEl(elTr,oRecord);
@@ -5439,8 +5445,12 @@ _addTrEl : function (oRecord) {
 _updateTrEl : function(elTr, oRecord) {
     var ok = this.get("formatRow") ? this.get("formatRow").call(this, elTr, oRecord) : true;
     if(ok) {
+        /**
+         * Removed for EMRE - this causes the tr's to leak:
+         *
         // Hide the row to prevent constant reflows
         elTr.style.display = 'none';
+         */
         
         // Update TD elements with new data
         var allTds = elTr.childNodes,
@@ -5452,8 +5462,12 @@ _updateTrEl : function(elTr, oRecord) {
             this.formatCell(allTds[i].firstChild, oRecord, this._oColumnSet.keys[i]);
         }
         
+        /**
+         * Removed for EMRE - this causes the tr's to leak:
+         *
         // Redisplay the row for reflow
         elTr.style.display = '';
+         */
     }
     
     elTr.id = oRecord.getId(); // Needed for Record association and tracking of FIRST/LAST
@@ -6104,7 +6118,7 @@ _onTableDblclick : function(e, oSelf) {
                 bKeepBubbling = oSelf.fireEvent("headerCellDblclickEvent",{target:elTarget,event:e});
                 break;
             case "tr":
-                if(elTarget.parentNode.nodeName.toLowerCase() == "thead") {
+                if(elTarget.parentNode && elTarget.parentNode.nodeName.toLowerCase() == "thead") {
                     bKeepBubbling = oSelf.fireEvent("theadRowDblclickEvent",{target:elTarget,event:e});
                     // Backward compatibility
                     bKeepBubbling = oSelf.fireEvent("headerRowDblclickEvent",{target:elTarget,event:e});
@@ -7194,10 +7208,12 @@ render : function() {
     // Table has rows
     if(nRecordsLength > 0) {                
         elTbody.style.display = "none";
+        //GMC NOTE Only table message here is the 'no records found'.  Hide for better layout
+        this.hideTableMessage();
         while(elTbody.lastChild) {
             elTbody.removeChild(elTbody.lastChild);
         }
-        elTbody.style.display = "";
+        //elTbody.style.display = "";
 
         // Set up the loop Chain to render rows
         this._oChainRender.add({
@@ -7208,15 +7224,18 @@ render : function() {
                                 nRecordsLength : (oArg.nCurrentRecord+oArg.nLoopLength),
                         elRow, nextSibling;
 
-                    elTbody.style.display = "none";
+                    //elTbody.style.display = "none";
                     
                     for(; i<endRecordIndex; i++) {
+                        if (!allRecords[i]) {
+                            continue;
+                        }
                         elRow = Dom.get(allRecords[i].getId());
-                        elRow = elRow || this._addTrEl(allRecords[i]);
+                        elRow = elRow || this._addTrEl(allRecords[i], i % 2 ? DT.CLASS_ODD : DT.CLASS_EVEN);
                         nextSibling = elTbody.childNodes[i] || null;
                         elTbody.insertBefore(elRow, nextSibling);
                     }
-                    elTbody.style.display = "";
+                    //elTbody.style.display = "";
                     
                     // Set up for the next loop
                     oArg.nCurrentRecord = i;
@@ -7240,8 +7259,9 @@ render : function() {
                     }
                     this._setFirstRow();
                     this._setLastRow();
-                    this._setRowStripes();
+                    //this._setRowStripes();
                     this._setSelections();
+                    elTbody.style.display = "";
                 }
             },
             scope: this,
@@ -7259,12 +7279,14 @@ render : function() {
                     if((this instanceof DT) && this._sId) {
                         var i = oArg.nCurrent,
                             loopN = oArg.nLoopLength,
-                            nIterEnd = (i - loopN < 0) ? -1 : i - loopN;
+							// @NOTE - GH - changed the first case from -1 to 0, 
+							// see http://yuilibrary.com/projects/yui2/ticket/2286608
+                            nIterEnd = (i - loopN < 0) ? 0 : i - loopN;
     
                         elTbody.style.display = "none";
                         
                         for(; i>nIterEnd; i--) {
-                            elTbody.deleteRow(-1);
+							elTbody.deleteRow(-1);
                         }
                         elTbody.style.display = "";
                         
@@ -14721,20 +14743,22 @@ validateColumnWidths : function(oColumn) {
         allKeysLength = allKeys.length,
         elRow     = this.getFirstTrEl();
 
-    // Reset overhang for IE
-    if(ua.ie) {
-        this._setOverhangValue(1);
-    }
-
     if(allKeys && elRow && (elRow.childNodes.length === allKeysLength)) {
+
+        // Reset overhang for IE
+        if(ua.ie) {
+            this._setOverhangValue(1);
+        }
+
         // Temporarily unsnap container since it causes inaccurate calculations
-        var sWidth = this.get("width");
+        // GMC: Expensive in IE and unneeded?
+        var sWidth = !ua.ie ? this.get("width") : null;
         if(sWidth) {
             this._elHdContainer.style.width = "";
             this._elBdContainer.style.width = "";
         }
         this._elContainer.style.width = "";
-        
+
         //Validate just one Column
         if(oColumn && lang.isNumber(oColumn.getKeyIndex())) {
             this._validateColumnWidth(oColumn, elRow.childNodes[oColumn.getKeyIndex()]);
@@ -14750,11 +14774,13 @@ validateColumnWidths : function(oColumn) {
                 }
             }
             
-            this._elTbody.style.display = "none";
-            for(i=0, len=todos.length; i<len; i++) {
-                this._setColumnWidth(todos[i], "auto", "visible");
+            if (todos.length) {
+                this._elTbody.style.display = "none";
+                for(i=0, len=todos.length; i<len; i++) {
+                    this._setColumnWidth(todos[i], "auto", "visible");
+                }
+                this._elTbody.style.display = "";
             }
-            this._elTbody.style.display = "";
             
             todos = [];
 
@@ -14789,14 +14815,16 @@ validateColumnWidths : function(oColumn) {
                 }
             }
             
-            this._elTbody.style.display = "none";
-            for(i=0, len=todos.length; i<len; i++) {
-                thisTodo = todos[i];
-                // Set to the wider auto-width
-                this._setColumnWidth(thisTodo[0], thisTodo[1]+"px", thisTodo[2]);
-                thisTodo[0]._calculatedWidth = thisTodo[1];
+            if (todos.length) {
+                this._elTbody.style.display = "none";
+                for(i=0, len=todos.length; i<len; i++) {
+                    thisTodo = todos[i];
+                    // Set to the wider auto-width
+                    this._setColumnWidth(thisTodo[0], thisTodo[1]+"px", thisTodo[2]);
+                    thisTodo[0]._calculatedWidth = thisTodo[1];
+                }
+                this._elTbody.style.display = "";
             }
-            this._elTbody.style.display = "";
         }
     
         // Resnap unsnapped containers
@@ -14820,7 +14848,7 @@ validateColumnWidths : function(oColumn) {
 _syncScroll : function() {
     this._syncScrollX();
     this._syncScrollY();
-    this._syncScrollOverhang();
+    //this._syncScrollOverhang();
     if(ua.opera) {
         // Bug 1925874
         this._elHdContainer.scrollLeft = this._elBdContainer.scrollLeft;
@@ -14839,17 +14867,20 @@ _syncScroll : function() {
  */
 _syncScrollY : function() {
     var elTbody = this._elTbody,
-        elBdContainer = this._elBdContainer;
+        elBdContainer = this._elBdContainer,
+        newWidth;
     
     // X-scrolling not enabled
     if(!this.get("width")) {
-        // Snap outer container width to content
-        this._elContainer.style.width = 
-                (elBdContainer.scrollHeight > elBdContainer.clientHeight) ?
-                // but account for y-scrollbar since it is visible
-                (elTbody.parentNode.clientWidth + 19) + "px" :
-                // no y-scrollbar, just borders
+        newWidth = (elBdContainer.scrollHeight > elBdContainer.clientHeight) ?
+                    // but account for y-scrollbar since it is visible
+                    (elTbody.parentNode.clientWidth + 19) + "px" :
+                    // no y-scrollbar, just borders
                 (elTbody.parentNode.clientWidth + 2) + "px";
+        // Snap outer container width to content
+        if (this._elContainer.style.width != newWidth) {
+            this._elContainer.style.width = newWidth;
+        }
     }
 },
 
@@ -14878,7 +14909,9 @@ _syncScrollX : function() {
         this._elMsgTbody.parentNode.style.width = this.getTheadEl().parentNode.offsetWidth + "px";
     }
     else {
-        this._elMsgTbody.parentNode.style.width = "";
+        if (this._elMsgTbody.parentNode.style.width) {
+            this._elMsgTbody.parentNode.style.width = "";
+        }
     }
 },
 

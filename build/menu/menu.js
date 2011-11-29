@@ -7342,7 +7342,7 @@ MenuItem.prototype = {
             }
 
 
-            oAnchor.innerHTML = (sEmphasisStartTag + sText + sEmphasisEndTag + sHelpTextHTML);
+            oAnchor.innerHTML = (sEmphasisStartTag + '' + sText + '' + sEmphasisEndTag + sHelpTextHTML);
 
         }
 
