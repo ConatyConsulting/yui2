@@ -258,6 +258,12 @@ Paginator.prototype = {
             setter    : Paginator.toNumber
         });
 
+        this.setAttributeConfig('totalRecordsDisplay', {
+            value     : 0,
+            validator : Paginator.isNumeric,
+            setter    : Paginator.toNumber
+        });
+
         /**
          * Zero based index of the record considered first on the current page.
          * For page based interactions, don't modify this attribute directly;
@@ -1171,7 +1177,8 @@ Paginator.ui.CurrentPageReport.init = function (p) {
                 'endIndex'    : records ? records[1] : 0,
                 'startRecord' : records ? records[0] + 1 : 0,
                 'endRecord'   : records ? records[1] + 1 : 0,
-                'totalRecords': paginator.get('totalRecords')
+                'totalRecords': paginator.get('totalRecords'),
+                'totalRecordsDisplay': paginator.get('totalRecordsDisplay')
             };
         },
         validator : l.isFunction
